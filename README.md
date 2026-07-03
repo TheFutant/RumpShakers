@@ -67,9 +67,11 @@ Auto-suggestions are always overridable — a great ballad can earn its slot.
 src/
   app/              expo-router screens
     (tabs)/index    Search / add song
-    (tabs)/library  Scored-song library
-    score           Scoring screen
+    (tabs)/library  Scored-song library (sort + tier/genre filter)
+    score           Score a new song
+    song/[id]       Song detail — view / edit / delete a saved song
   components/       themed UI primitives (from the Expo template)
+    score-form      the rubric form, shared by `score` and `song/[id]`
   lib/
     types.ts        domain model (SongDraft, ScoredSong, rubric)
     scoring.ts      auto-score rules + tier math
@@ -100,7 +102,7 @@ either way.
 
 - [x] **M1** — scaffold, song search, GetSongBPM integration, manual-entry fallback
 - [x] **M2** — scoring screen (7-category rubric, auto-fill + override, notes, save to SQLite)
-- [ ] **M3** — library (sort by score/tempo/title, filter by tier/genre) + song detail
+- [x] **M3** — library (sort by score/tempo/title, filter by tier/genre) + song detail (view/edit/delete)
 - [ ] **M4** — JSON export of the library (schema documented in `SCHEMA.md`)
 
 Out of scope for the MVP: cloud sync, multi-user, audio analysis, CSV export,

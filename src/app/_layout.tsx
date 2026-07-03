@@ -16,6 +16,7 @@ export default function RootLayout() {
         <Stack>
           <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
           <Stack.Screen name="score" options={{ title: 'Score Song' }} />
+          <Stack.Screen name="song/[id]" options={{ title: 'Song Detail' }} />
         </Stack>
       </ThemeProvider>
     </SongStoreProvider>
