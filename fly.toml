@@ -1,0 +1,19 @@
+# Fly.io config — serves the static Expo web export via nginx.
+# The public https://<app>.fly.dev URL doubles as the GetSongBPM backlink.
+app = "rumpshakers"
+primary_region = "iad"
+
+[build]
+
+[http_service]
+  internal_port = 80
+  force_https = true
+  # Static site — scale to zero when idle, wake on request (cheap; first hit
+  # after idle has a ~1s cold start, fine for a backlink target).
+  auto_stop_machines = "stop"
+  auto_start_machines = true
+  min_machines_running = 0
+
+[[vm]]
+  size = "shared-cpu-1x"
+  memory = "256mb"

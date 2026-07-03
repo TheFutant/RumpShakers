@@ -1,0 +1,15 @@
+# Keep the build context small and secret-free. Everything the build needs
+# (package*.json, app.json, src/, assets/, nginx.conf) is NOT listed here.
+node_modules
+dist
+web-build
+.expo
+.git
+.env
+.env*.local
+*.log
+.claude
+.vscode
+/ios
+/android
+.DS_Store
