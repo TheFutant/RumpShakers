@@ -8,6 +8,7 @@ import { ThemedView } from '@/components/themed-view';
 import { MaxContentWidth, Spacing, TopWebNavInset } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import { exportLibrary } from '@/lib/library-export';
+import { importLibrary } from '@/lib/library-import';
 import { TIER_INFO } from '@/lib/scoring';
 import { useSongStore } from '@/lib/song-store';
 import { MAX_TOTAL_SCORE, type ScoredSong, type Tier } from '@/lib/types';
@@ -38,7 +39,9 @@ export default function LibraryScreen() {
   const [tierFilter, setTierFilter] = useState<TierFilter>('all');
   const [genreFilter, setGenreFilter] = useState<string>('all');
   const [exporting, setExporting] = useState(false);
-  const [exportMsg, setExportMsg] = useState<{ tone: 'ok' | 'err'; text: string } | null>(null);
+  const [importing, setImporting] = useState(false);
+  const [statusMsg, setStatusMsg] = useState<{ tone: 'ok' | 'err'; text: string } | null>(null);
+  const busy = exporting || importing;
 
   // Reload every time the tab regains focus so saves/edits/deletes from the
   // score screen are reflected the moment we land back here.
@@ -91,22 +94,47 @@ export default function LibraryScreen() {
   // Exports the whole library (not the filtered view). Native shares the file;
   // web downloads it.
   const onExport = async () => {
-    if (songs == null || songs.length === 0 || exporting) return;
+    if (songs == null || songs.length === 0 || busy) return;
     setExporting(true);
-    setExportMsg(null);
+    setStatusMsg(null);
     try {
       const result = await exportLibrary(songs);
       const plural = result.songCount === 1 ? '' : 's';
-      setExportMsg({
+      setStatusMsg({
         tone: 'ok',
         text: result.shared
           ? `Exported ${result.songCount} song${plural}.`
           : `Downloaded ${result.filename} (${result.songCount} song${plural}).`,
       });
     } catch {
-      setExportMsg({ tone: 'err', text: 'Export failed — please try again.' });
+      setStatusMsg({ tone: 'err', text: 'Export failed — please try again.' });
     } finally {
       setExporting(false);
+    }
+  };
+
+  // Imports a JSON export, merging by id (last-write-wins). Adds/updates only —
+  // never deletes local songs. Reloads the list on success.
+  const onImport = async () => {
+    if (songs == null || busy) return;
+    setImporting(true);
+    setStatusMsg(null);
+    try {
+      const outcome = await importLibrary(store);
+      if (outcome.status === 'cancelled') return;
+      if (outcome.status === 'error') {
+        setStatusMsg({ tone: 'err', text: outcome.message });
+        return;
+      }
+      setSongs(await store.getAll());
+      const parts = [`${outcome.added} added`, `${outcome.updated} updated`];
+      if (outcome.skippedOlder > 0) parts.push(`${outcome.skippedOlder} older skipped`);
+      if (outcome.invalid > 0) parts.push(`${outcome.invalid} invalid`);
+      setStatusMsg({ tone: 'ok', text: `Import: ${parts.join(', ')}.` });
+    } catch {
+      setStatusMsg({ tone: 'err', text: 'Import failed — please try again.' });
+    } finally {
+      setImporting(false);
     }
   };
 
@@ -114,35 +142,39 @@ export default function LibraryScreen() {
     <View style={styles.header}>
       <View style={styles.headerTop}>
         <ThemedText type="subtitle">Library</ThemedText>
-        {songs != null && songs.length > 0 && (
-          <Pressable
-            onPress={onExport}
-            disabled={exporting}
-            style={({ pressed }) => [
-              styles.exportButton,
-              { backgroundColor: theme.backgroundElement },
-              (exporting || pressed) && styles.pillPressed,
-            ]}>
-            <ThemedText type="smallBold" style={{ color: theme.tint }}>
-              {exporting ? 'Exporting…' : 'Export JSON'}
-            </ThemedText>
-          </Pressable>
+        {songs != null && (
+          <View style={styles.headerActions}>
+            <ActionButton
+              label={importing ? 'Importing…' : 'Import'}
+              onPress={onImport}
+              disabled={busy}
+              theme={theme}
+            />
+            {songs.length > 0 && (
+              <ActionButton
+                label={exporting ? 'Exporting…' : 'Export'}
+                onPress={onExport}
+                disabled={busy}
+                theme={theme}
+              />
+            )}
+          </View>
         )}
       </View>
       <ThemedText type="small" themeColor="textSecondary">
         {songs == null
           ? 'Loading…'
           : songs.length === 0
-            ? 'No scored songs yet — score one on the Search tab and it lands here.'
+            ? 'No scored songs yet — score one on the Search tab, or import a library.'
             : visible.length === songs.length
               ? `${songs.length} scored song${songs.length === 1 ? '' : 's'} · tap to view or edit`
               : `Showing ${visible.length} of ${songs.length}`}
       </ThemedText>
-      {exportMsg && (
+      {statusMsg && (
         <ThemedText
           type="small"
-          style={{ color: exportMsg.tone === 'err' ? TIER_INFO.cut.color : theme.tint }}>
-          {exportMsg.text}
+          style={{ color: statusMsg.tone === 'err' ? TIER_INFO.cut.color : theme.tint }}>
+          {statusMsg.text}
         </ThemedText>
       )}
 
@@ -251,6 +283,33 @@ function Pill({
   );
 }
 
+function ActionButton({
+  label,
+  onPress,
+  disabled,
+  theme,
+}: {
+  label: string;
+  onPress: () => void;
+  disabled?: boolean;
+  theme: ReturnType<typeof useTheme>;
+}) {
+  return (
+    <Pressable
+      onPress={onPress}
+      disabled={disabled}
+      style={({ pressed }) => [
+        styles.actionButton,
+        { backgroundColor: theme.backgroundElement },
+        (disabled || pressed) && styles.pillPressed,
+      ]}>
+      <ThemedText type="smallBold" style={{ color: theme.tint }}>
+        {label}
+      </ThemedText>
+    </Pressable>
+  );
+}
+
 function SongRow({ song, onPress }: { song: ScoredSong; onPress: () => void }) {
   const info = TIER_INFO[song.tier];
   return (
@@ -313,7 +372,11 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     gap: Spacing.three,
   },
-  exportButton: {
+  headerActions: {
+    flexDirection: 'row',
+    gap: Spacing.two,
+  },
+  actionButton: {
     borderRadius: Spacing.four,
     paddingHorizontal: Spacing.three,
     paddingVertical: Spacing.one + 2,
