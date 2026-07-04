@@ -1,0 +1,26 @@
+name: Deploy to Fly.io
+
+# Deploy rumpshakers.fly.dev on every push to main.
+# GitHub Actions natively skips a run when the head commit message contains
+# `[skip ci]`, so docs-only commits won't trigger a no-op deploy.
+on:
+  push:
+    branches: [main]
+
+# One deploy at a time; a newer push cancels an in-flight one.
+concurrency:
+  group: fly-deploy-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    name: Deploy rumpshakers
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: superfly/flyctl-actions/setup-flyctl@master
+      # Builds the multi-stage Dockerfile on Fly's remote builder (no Docker on
+      # the runner needed). App name + config come from fly.toml.
+      - run: flyctl deploy --remote-only
+        env:
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
