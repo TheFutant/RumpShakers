@@ -10,10 +10,13 @@ COPY package.json package-lock.json ./
 RUN npm ci
 
 COPY . .
-# EXPO_PUBLIC_* vars are inlined at build time. None is baked here, so the
-# deployed site ships with GetSongBPM search disabled and manual entry enabled
-# — which is exactly what we want until a real API key exists. Rebuild with
-# EXPO_PUBLIC_GETSONGBPM_API_KEY set to light search up.
+# GetSongBPM key, inlined into the web bundle at export time. EXPO_PUBLIC_* is
+# client-visible by design, so on the public URL this key is exposed — an
+# accepted trade-off to enable search on rumpshakers.fly.dev. Supplied as a
+# build arg from CI (secrets.EXPO_PUBLIC_GETSONGBPM_API_KEY). The empty default
+# keeps search disabled (manual entry only) for any build that doesn't pass it.
+ARG EXPO_PUBLIC_GETSONGBPM_API_KEY=""
+ENV EXPO_PUBLIC_GETSONGBPM_API_KEY=$EXPO_PUBLIC_GETSONGBPM_API_KEY
 RUN npx expo export --platform web
 
 # ---- serve: nginx over the static files ----
