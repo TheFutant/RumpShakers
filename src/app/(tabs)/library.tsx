@@ -7,6 +7,7 @@ import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { MaxContentWidth, Spacing, TopWebNavInset } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
+import { exportLibrary } from '@/lib/library-export';
 import { TIER_INFO } from '@/lib/scoring';
 import { useSongStore } from '@/lib/song-store';
 import { MAX_TOTAL_SCORE, type ScoredSong, type Tier } from '@/lib/types';
@@ -30,11 +31,14 @@ const TIER_FILTERS: { key: TierFilter; label: string }[] = [
 export default function LibraryScreen() {
   const store = useSongStore();
   const router = useRouter();
+  const theme = useTheme();
   // null = still loading (first paint), [] = loaded-but-empty.
   const [songs, setSongs] = useState<ScoredSong[] | null>(null);
   const [sort, setSort] = useState<SortKey>('score');
   const [tierFilter, setTierFilter] = useState<TierFilter>('all');
   const [genreFilter, setGenreFilter] = useState<string>('all');
+  const [exporting, setExporting] = useState(false);
+  const [exportMsg, setExportMsg] = useState<{ tone: 'ok' | 'err'; text: string } | null>(null);
 
   // Reload every time the tab regains focus so saves/edits/deletes from the
   // score screen are reflected the moment we land back here.
@@ -84,9 +88,47 @@ export default function LibraryScreen() {
   const openSong = (song: ScoredSong) =>
     router.push({ pathname: '/song/[id]', params: { id: song.id } });
 
+  // Exports the whole library (not the filtered view). Native shares the file;
+  // web downloads it.
+  const onExport = async () => {
+    if (songs == null || songs.length === 0 || exporting) return;
+    setExporting(true);
+    setExportMsg(null);
+    try {
+      const result = await exportLibrary(songs);
+      const plural = result.songCount === 1 ? '' : 's';
+      setExportMsg({
+        tone: 'ok',
+        text: result.shared
+          ? `Exported ${result.songCount} song${plural}.`
+          : `Downloaded ${result.filename} (${result.songCount} song${plural}).`,
+      });
+    } catch {
+      setExportMsg({ tone: 'err', text: 'Export failed — please try again.' });
+    } finally {
+      setExporting(false);
+    }
+  };
+
   const header = (
     <View style={styles.header}>
-      <ThemedText type="subtitle">Library</ThemedText>
+      <View style={styles.headerTop}>
+        <ThemedText type="subtitle">Library</ThemedText>
+        {songs != null && songs.length > 0 && (
+          <Pressable
+            onPress={onExport}
+            disabled={exporting}
+            style={({ pressed }) => [
+              styles.exportButton,
+              { backgroundColor: theme.backgroundElement },
+              (exporting || pressed) && styles.pillPressed,
+            ]}>
+            <ThemedText type="smallBold" style={{ color: theme.tint }}>
+              {exporting ? 'Exporting…' : 'Export JSON'}
+            </ThemedText>
+          </Pressable>
+        )}
+      </View>
       <ThemedText type="small" themeColor="textSecondary">
         {songs == null
           ? 'Loading…'
@@ -96,6 +138,13 @@ export default function LibraryScreen() {
               ? `${songs.length} scored song${songs.length === 1 ? '' : 's'} · tap to view or edit`
               : `Showing ${visible.length} of ${songs.length}`}
       </ThemedText>
+      {exportMsg && (
+        <ThemedText
+          type="small"
+          style={{ color: exportMsg.tone === 'err' ? TIER_INFO.cut.color : theme.tint }}>
+          {exportMsg.text}
+        </ThemedText>
+      )}
 
       {songs != null && songs.length > 0 && (
         <View style={styles.controls}>
@@ -257,6 +306,17 @@ const styles = StyleSheet.create({
   header: {
     gap: Spacing.two,
     marginBottom: Spacing.two,
+  },
+  headerTop: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: Spacing.three,
+  },
+  exportButton: {
+    borderRadius: Spacing.four,
+    paddingHorizontal: Spacing.three,
+    paddingVertical: Spacing.one + 2,
   },
   controls: {
     gap: Spacing.three,

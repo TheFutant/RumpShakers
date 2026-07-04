@@ -79,6 +79,9 @@ src/
     song-store-shared.ts  SongStore contract + buildScoredSong()
     song-store.tsx        native store — expo-sqlite (SQLiteProvider + onInit migration)
     song-store.web.tsx    web store — localStorage (see below)
+    library-export-shared.ts  export document builder + format (see SCHEMA.md)
+    library-export.ts         native export — expo-file-system + expo-sharing
+    library-export.web.ts     web export — Blob download
 ```
 
 ## Storage
@@ -103,7 +106,7 @@ either way.
 - [x] **M1** — scaffold, song search, GetSongBPM integration, manual-entry fallback
 - [x] **M2** — scoring screen (7-category rubric, auto-fill + override, notes, save to SQLite)
 - [x] **M3** — library (sort by score/tempo/title, filter by tier/genre) + song detail (view/edit/delete)
-- [ ] **M4** — JSON export of the library (schema documented in `SCHEMA.md`)
+- [x] **M4** — JSON export of the library (Library → "Export JSON"; schema documented in [`SCHEMA.md`](SCHEMA.md))
 
 Out of scope for the MVP: cloud sync, multi-user, audio analysis, CSV export,
 import flows.
