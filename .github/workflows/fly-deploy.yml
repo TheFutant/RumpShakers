@@ -18,7 +18,7 @@ jobs:
     name: Deploy rumpshakers
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - uses: superfly/flyctl-actions/setup-flyctl@master
       # Builds the multi-stage Dockerfile on Fly's remote builder (no Docker on
       # the runner needed). App name + config come from fly.toml. The GetSongBPM
