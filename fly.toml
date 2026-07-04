@@ -1,16 +1,17 @@
-# fly.toml app configuration file generated for rump-shakers on 2026-07-04T15:48:54Z
-#
-# See https://fly.io/docs/reference/configuration/ for information about how to use this file.
-#
-
-app = 'rump-shakers'
+# Fly.io config — serves the static Expo web export via nginx.
+# The public https://rumpshakers.fly.dev URL doubles as the GetSongBPM backlink.
+app = 'rumpshakers'
 primary_region = 'iad'
 
 [build]
 
 [http_service]
+  # Must match the port nginx listens on (see nginx.conf / Dockerfile). 8080 is
+  # Fly's default, so a future `fly launch` regeneration won't break this.
   internal_port = 8080
   force_https = true
+  # Static site — scale to zero when idle, wake on request (cheap; first hit
+  # after idle has a ~1s cold start, fine for a backlink target).
   auto_stop_machines = 'stop'
   auto_start_machines = true
   min_machines_running = 0
