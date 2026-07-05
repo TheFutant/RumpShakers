@@ -18,12 +18,16 @@ import { tierForTotal, totalScore } from './scoring';
 import type { RubricScores, ScoredSong, SongDraft } from './types';
 
 export interface SongStore {
-  /** All scored songs, most-recently-scored first. */
+  /** Live scored songs (tombstones hidden), most-recently-scored first. */
   getAll(): Promise<ScoredSong[]>;
+  /** Live song by id, or null if missing or tombstoned. */
   getById(id: string): Promise<ScoredSong | null>;
-  /** Insert or replace by id. */
+  /** Insert or replace by id (a saved row may carry a `deletedAt` tombstone). */
   save(song: ScoredSong): Promise<void>;
+  /** Soft-delete: sets `deletedAt` + bumps `dateLastScored` so the delete syncs. */
   remove(id: string): Promise<void>;
+  /** Every row including tombstones — for the sync/import LWW merge only. */
+  getAllIncludingDeleted(): Promise<ScoredSong[]>;
 }
 
 /**
@@ -57,5 +61,6 @@ export function buildScoredSong(
     notes: notes.trim(),
     dateAdded: existing?.dateAdded ?? now,
     dateLastScored: now,
+    deletedAt: null,
   };
 }

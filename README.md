@@ -111,7 +111,7 @@ either way.
 ### Beyond the MVP
 
 - [x] **Import** — Library → "Import" merges a JSON export into the local library: add-or-update by `id`, **last-write-wins** on `date_last_scored`, never deletes. Recomputes `total_score`/`tier` from the file. This LWW-by-id merge is the groundwork for a shared/synced library.
-- [ ] **Shared library (Supabase sync)** — pool the band's libraries into one, offline-first.
+- [x] **Shared library (Supabase sync)** — scaffolded, **off by default**. Two-way, offline-first, last-write-wins with soft-delete tombstones. Add a Supabase project's URL + anon key to switch it on — see [`SYNC.md`](SYNC.md).
 
 Out of scope for the MVP: cloud sync, multi-user, audio analysis, CSV export,
 import flows.

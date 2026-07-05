@@ -1,5 +1,5 @@
 import { useFocusEffect, useRouter } from 'expo-router';
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, FlatList, Pressable, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
@@ -11,6 +11,8 @@ import { exportLibrary } from '@/lib/library-export';
 import { importLibrary } from '@/lib/library-import';
 import { TIER_INFO } from '@/lib/scoring';
 import { useSongStore } from '@/lib/song-store';
+import { syncNow } from '@/lib/sync';
+import { isSyncConfigured } from '@/lib/sync-config';
 import { MAX_TOTAL_SCORE, type ScoredSong, type Tier } from '@/lib/types';
 
 type SortKey = 'score' | 'tempo' | 'title';
@@ -40,8 +42,11 @@ export default function LibraryScreen() {
   const [genreFilter, setGenreFilter] = useState<string>('all');
   const [exporting, setExporting] = useState(false);
   const [importing, setImporting] = useState(false);
+  const [syncing, setSyncing] = useState(false);
+  const [lastSynced, setLastSynced] = useState<string | null>(null);
   const [statusMsg, setStatusMsg] = useState<{ tone: 'ok' | 'err'; text: string } | null>(null);
-  const busy = exporting || importing;
+  const busy = exporting || importing || syncing;
+  const syncConfigured = isSyncConfigured();
 
   // Reload every time the tab regains focus so saves/edits/deletes from the
   // score screen are reflected the moment we land back here.
@@ -138,12 +143,49 @@ export default function LibraryScreen() {
     }
   };
 
+  // Two-way reconcile with the shared Supabase library, then reload. No-op when
+  // sync isn't configured. Never throws — surfaces failures as a status line.
+  const onSync = useCallback(async () => {
+    setSyncing(true);
+    setStatusMsg(null);
+    try {
+      const result = await syncNow(store);
+      if (result.status === 'ok') {
+        setSongs(await store.getAll());
+        setLastSynced(new Date().toISOString());
+        setStatusMsg({ tone: 'ok', text: `Synced — ${result.pulled} in, ${result.pushed} out.` });
+      } else if (result.status === 'offline') {
+        setStatusMsg({ tone: 'err', text: 'Offline — will sync when you reconnect.' });
+      } else if (result.status === 'error') {
+        setStatusMsg({ tone: 'err', text: `Sync failed: ${result.message}` });
+      }
+    } finally {
+      setSyncing(false);
+    }
+  }, [store]);
+
+  // Auto-sync once when the screen first mounts (if configured).
+  const didAutoSync = useRef(false);
+  useEffect(() => {
+    if (!syncConfigured || didAutoSync.current) return;
+    didAutoSync.current = true;
+    void onSync();
+  }, [syncConfigured, onSync]);
+
   const header = (
     <View style={styles.header}>
       <View style={styles.headerTop}>
         <ThemedText type="subtitle">Library</ThemedText>
         {songs != null && (
           <View style={styles.headerActions}>
+            {syncConfigured && (
+              <ActionButton
+                label={syncing ? 'Syncing…' : 'Sync'}
+                onPress={onSync}
+                disabled={busy}
+                theme={theme}
+              />
+            )}
             <ActionButton
               label={importing ? 'Importing…' : 'Import'}
               onPress={onImport}
@@ -175,6 +217,15 @@ export default function LibraryScreen() {
           type="small"
           style={{ color: statusMsg.tone === 'err' ? TIER_INFO.cut.color : theme.tint }}>
           {statusMsg.text}
+        </ThemedText>
+      )}
+      {syncConfigured && (
+        <ThemedText type="code" themeColor="textSecondary">
+          {syncing
+            ? 'Syncing shared library…'
+            : lastSynced
+              ? `Shared library · last synced ${new Date(lastSynced).toLocaleTimeString()}`
+              : 'Shared library · not synced yet'}
         </ThemedText>
       )}
 

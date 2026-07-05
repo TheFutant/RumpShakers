@@ -112,4 +112,10 @@ export interface ScoredSong extends SongDraft {
   /** ISO-8601 timestamps. */
   dateAdded: string;
   dateLastScored: string;
+  /**
+   * Soft-delete tombstone: ISO timestamp when removed, or null if live. Kept so
+   * a delete propagates through sync instead of the row reappearing on the next
+   * pull. The UI (getAll/getById) hides tombstoned rows; sync sees them.
+   */
+  deletedAt: string | null;
 }

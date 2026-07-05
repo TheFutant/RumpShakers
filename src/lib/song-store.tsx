@@ -21,15 +21,15 @@ import type { RubricScores, ScoredSong } from './types';
 import type { SongStore } from './song-store-shared';
 
 const DB_NAME = 'setlist.db';
-const DB_VERSION = 1;
+const DB_VERSION = 2;
 
 /** Runs once per app launch before children mount; safe to call repeatedly. */
 async function migrate(db: SQLiteDatabase): Promise<void> {
   const result = await db.getFirstAsync<{ user_version: number }>('PRAGMA user_version');
-  const current = result?.user_version ?? 0;
+  let current = result?.user_version ?? 0;
   if (current >= DB_VERSION) return;
 
-  if (current === 0) {
+  if (current < 1) {
     await db.execAsync(`
       PRAGMA journal_mode = 'wal';
       CREATE TABLE IF NOT EXISTS songs (
@@ -52,6 +52,13 @@ async function migrate(db: SQLiteDatabase): Promise<void> {
         date_last_scored  TEXT NOT NULL
       );
     `);
+    current = 1;
+  }
+
+  if (current < 2) {
+    // Soft-delete tombstone column (null = live). Enables delete propagation via sync.
+    await db.execAsync(`ALTER TABLE songs ADD COLUMN deleted_at TEXT;`);
+    current = 2;
   }
 
   await db.execAsync(`PRAGMA user_version = ${DB_VERSION}`);
@@ -76,6 +83,7 @@ interface SongRow {
   notes: string;
   date_added: string;
   date_last_scored: string;
+  deleted_at: string | null;
 }
 
 function rowToSong(row: SongRow): ScoredSong {
@@ -97,6 +105,7 @@ function rowToSong(row: SongRow): ScoredSong {
     notes: row.notes,
     dateAdded: row.date_added,
     dateLastScored: row.date_last_scored,
+    deletedAt: row.deleted_at,
   };
 }
 
@@ -104,21 +113,30 @@ function makeStore(db: SQLiteDatabase): SongStore {
   return {
     async getAll() {
       const rows = await db.getAllAsync<SongRow>(
-        'SELECT * FROM songs ORDER BY date_last_scored DESC'
+        'SELECT * FROM songs WHERE deleted_at IS NULL ORDER BY date_last_scored DESC'
       );
       return rows.map(rowToSong);
     },
     async getById(id) {
-      const row = await db.getFirstAsync<SongRow>('SELECT * FROM songs WHERE id = ?', id);
+      const row = await db.getFirstAsync<SongRow>(
+        'SELECT * FROM songs WHERE id = ? AND deleted_at IS NULL',
+        id
+      );
       return row ? rowToSong(row) : null;
+    },
+    async getAllIncludingDeleted() {
+      const rows = await db.getAllAsync<SongRow>(
+        'SELECT * FROM songs ORDER BY date_last_scored DESC'
+      );
+      return rows.map(rowToSong);
     },
     async save(song) {
       await db.runAsync(
         `INSERT OR REPLACE INTO songs (
            id, title, artist, genre, tempo_bpm, "key", time_signature,
            danceability_raw, acousticness_raw, data_source, source_song_id,
-           rubric_scores, total_score, tier, notes, date_added, date_last_scored
-         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+           rubric_scores, total_score, tier, notes, date_added, date_last_scored, deleted_at
+         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [
           song.id,
           song.title,
@@ -137,11 +155,17 @@ function makeStore(db: SQLiteDatabase): SongStore {
           song.notes,
           song.dateAdded,
           song.dateLastScored,
+          song.deletedAt,
         ]
       );
     },
     async remove(id) {
-      await db.runAsync('DELETE FROM songs WHERE id = ?', id);
+      // Soft delete: tombstone + bump date_last_scored so the delete wins on sync.
+      const now = new Date().toISOString();
+      await db.runAsync(
+        'UPDATE songs SET deleted_at = ?, date_last_scored = ? WHERE id = ?',
+        [now, now, id]
+      );
     },
   };
 }

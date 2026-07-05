@@ -84,6 +84,7 @@ function parseSong(raw: unknown): ScoredSong | null {
     notes: typeof r.notes === 'string' ? r.notes : '',
     dateAdded,
     dateLastScored,
+    deletedAt: asString(r.deleted_at), // absent in live-only export files → null
   };
 }
 
@@ -122,7 +123,9 @@ export async function mergeIntoStore(
   store: SongStore,
   incoming: ScoredSong[]
 ): Promise<Omit<ImportSummary, 'invalid'>> {
-  const existing = await store.getAll();
+  // Compare against tombstones too, so importing a live song can't blindly
+  // resurrect one that was deleted more recently (LWW still applies).
+  const existing = await store.getAllIncludingDeleted();
   const byId = new Map(existing.map((s) => [s.id, s]));
   let added = 0;
   let updated = 0;

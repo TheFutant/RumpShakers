@@ -24,7 +24,9 @@ function readAll(): ScoredSong[] {
   try {
     const raw = window.localStorage.getItem(STORAGE_KEY);
     const parsed: unknown = raw ? JSON.parse(raw) : [];
-    return Array.isArray(parsed) ? (parsed as ScoredSong[]) : [];
+    if (!Array.isArray(parsed)) return [];
+    // Normalize rows saved before the tombstone field existed.
+    return (parsed as ScoredSong[]).map((s) => ({ ...s, deletedAt: s.deletedAt ?? null }));
   } catch {
     return [];
   }
@@ -35,19 +37,33 @@ function writeAll(songs: ScoredSong[]): void {
   window.localStorage.setItem(STORAGE_KEY, JSON.stringify(songs));
 }
 
+const byScoredDesc = (a: ScoredSong, b: ScoredSong) =>
+  b.dateLastScored.localeCompare(a.dateLastScored);
+
 const webStore: SongStore = {
   async getAll() {
-    return readAll().sort((a, b) => b.dateLastScored.localeCompare(a.dateLastScored));
+    return readAll()
+      .filter((s) => s.deletedAt == null)
+      .sort(byScoredDesc);
   },
   async getById(id) {
-    return readAll().find((s) => s.id === id) ?? null;
+    return readAll().find((s) => s.id === id && s.deletedAt == null) ?? null;
+  },
+  async getAllIncludingDeleted() {
+    return readAll().sort(byScoredDesc);
   },
   async save(song) {
     const others = readAll().filter((s) => s.id !== song.id);
     writeAll([...others, song]);
   },
   async remove(id) {
-    writeAll(readAll().filter((s) => s.id !== id));
+    // Soft delete: tombstone + bump date_last_scored so the delete wins on sync.
+    const now = new Date().toISOString();
+    const all = readAll();
+    const index = all.findIndex((s) => s.id === id);
+    if (index === -1) return;
+    all[index] = { ...all[index], deletedAt: now, dateLastScored: now };
+    writeAll(all);
   },
 };
 
