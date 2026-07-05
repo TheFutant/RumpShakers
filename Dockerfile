@@ -16,7 +16,14 @@ COPY . .
 # build arg from CI (secrets.EXPO_PUBLIC_GETSONGBPM_API_KEY). The empty default
 # keeps search disabled (manual entry only) for any build that doesn't pass it.
 ARG EXPO_PUBLIC_GETSONGBPM_API_KEY=""
+# Supabase shared-library sync (see SYNC.md). Also client-visible by design;
+# baking it here turns on shared sync for the public rumpshakers.fly.dev build.
+# Empty defaults keep sync off for any build that doesn't supply them.
+ARG EXPO_PUBLIC_SUPABASE_URL=""
+ARG EXPO_PUBLIC_SUPABASE_ANON_KEY=""
 ENV EXPO_PUBLIC_GETSONGBPM_API_KEY=$EXPO_PUBLIC_GETSONGBPM_API_KEY
+ENV EXPO_PUBLIC_SUPABASE_URL=$EXPO_PUBLIC_SUPABASE_URL
+ENV EXPO_PUBLIC_SUPABASE_ANON_KEY=$EXPO_PUBLIC_SUPABASE_ANON_KEY
 RUN npx expo export --platform web
 
 # ---- serve: nginx over the static files ----
